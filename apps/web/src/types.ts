@@ -1,0 +1,11 @@
+export type Page = 'inicio' | 'tareas' | 'tiempo' | 'metodos' | 'focus';
+export type TaskKind = 'study' | 'exam' | 'delivery';
+export type Step = { id: string; taskId: string; title: string; minutes: number; done: boolean; position: number };
+export type Task = { id: string; title: string; kind: TaskKind; priority: number; dueDate: string | null; done: boolean; createdAt: string; steps: Step[] };
+export type Session = { id: string; minutes: number; elapsedSeconds: number; completed: boolean; localDate: string; taskId: string | null; createdAt: string };
+export type ChatMessage = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string };
+export type Flashcard = { id: string; front: string; back: string; reviewed: boolean; createdAt: string };
+export type StudyMethod = { id: string; title: string; tagline: string; description: string; instructions: string[]; example: string; color: string; icon: string; bestFor: string };
+export type Stats = { weekly: { date: string; minutes: number; sessions: number }[]; minutes: number; stepsCompleted: number; points: number; tasksCompleted: number; totalTasks: number };
+export type Bootstrap = { name: string; tasks: Task[]; sessions: Session[]; messages: ChatMessage[]; flashcards: Flashcard[]; methods: StudyMethod[]; stats: Stats };
+export type AIStatus = { connected: boolean; installed: boolean; model: string };

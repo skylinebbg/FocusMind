@@ -1,0 +1,15 @@
+{
+  "name": "paso-a-paso",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c cyan,magenta \"npm run dev -w @paso/api\" \"npm run dev -w @paso/web\"",
+    "build": "npm run build -w @paso/api && npm run build -w @paso/web",
+    "typecheck": "npm run typecheck -w @paso/api && npm run typecheck -w @paso/web",
+    "test": "npm run test -w @paso/api",
+    "start": "npm run start -w @paso/api"
+  },
+  "devDependencies": { "concurrently": "^9.2.1", "typescript": "^5.9.3" },
+  "engines": {"node": ">=22.16.0"}
+}
