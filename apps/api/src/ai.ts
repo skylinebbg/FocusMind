@@ -1,6 +1,7 @@
 const groqKey = () => (process.env.GROQ_API_KEY || '').trim();
 const base = () => (process.env.OLLAMA_URL || 'http://127.0.0.1:11434').replace(/\/$/, '');
 const model = () => process.env.GROQ_MODEL || process.env.OLLAMA_MODEL || (groqKey() ? 'llama-3.3-70b-versatile' : 'llama3.2:3b');
+const groqEndpoint = 'https://groq.com' + '/openai/v1/chat/completions';
 
 export class AIUnavailableError extends Error { constructor(message: string) { super(message); this.name = 'AIUnavailableError'; } }
 
@@ -11,7 +12,7 @@ async function askAI(messages: { role: string; content: string }[]): Promise<str
   if (groqKey()) {
     let response: Response;
     try {
-      response = await fetch('https://groq.com', {
+      response = await fetch(groqEndpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'authorization': `Bearer ${groqKey()}` },
         body: JSON.stringify({ model: model(), messages, temperature: 0.5 }),
