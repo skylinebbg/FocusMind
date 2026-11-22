@@ -23,7 +23,7 @@ async function askAI(messages: { role: string; content: string }[]): Promise<str
     }
     const data = await response.json().catch(() => ({})) as GroqReply;
     if (!response.ok) throw new AIUnavailableError(`Error en el servicio de IA: ${data.error?.message || response.status}.`);
-    const content = data.choices?.[0]?.message?.content?.trim();
+    const content = data.choices?.at(0)?.message?.content?.trim();
     if (!content) throw new AIUnavailableError('La IA no generó una respuesta. Intenta de nuevo.');
     return content;
   }
@@ -52,7 +52,7 @@ export async function aiStatus() {
     const response = await fetch(`${base()}/api/tags`, { signal: AbortSignal.timeout(1800) });
     if (!response.ok) return { connected: false, model: model(), installed: false };
     const data = await response.json() as { models?: { name?: string }[] };
-    const installed = (data.models || []).some(m => m.name === model() || m.name?.split(':')[0] === model().split(':')[0]);
+    const installed = (data.models || []).some(m => m.name === model() || m.name?.split(':').at(0) === model().split(':').at(0));
     return { connected: true, installed, model: model() };
   } catch { return { connected: false, installed: false, model: model() }; }
 }
@@ -72,7 +72,7 @@ export async function generateFlashcardsAI(notes: string): Promise<{ front: stri
   try {
     const match = output.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('Sin JSON');
-    const parsed: unknown = JSON.parse(match[0]);
+    const parsed: unknown = JSON.parse(match.at(0) || '[]');
     if (!Array.isArray(parsed)) throw new Error('No es arreglo');
     const clean = parsed.filter((v): v is { front: string; back: string } => typeof v === 'object' && v !== null && typeof v.front === 'string' && typeof v.back === 'string')
       .slice(0, 8).map(v => ({ front: v.front.trim().slice(0, 250), back: v.back.trim().slice(0, 800) })).filter(v => v.front && v.back);
