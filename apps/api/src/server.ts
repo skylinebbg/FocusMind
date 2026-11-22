@@ -10,7 +10,10 @@ import { AIUnavailableError, aiStatus, chatAI, generateFlashcardsAI } from './ai
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../');
 dotenv.config({ path: resolve(projectRoot, '.env') });
-const store = createStore(resolve(projectRoot, process.env.DATABASE_PATH || 'data/paso-a-paso.sqlite'));
+
+const dbUrl = process.env.TURSO_DATABASE_URL || `file:${resolve(projectRoot, process.env.DATABASE_PATH || 'data/focusmind.sqlite')}`;
+const store = await createStore(dbUrl, process.env.TURSO_AUTH_TOKEN);
+
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '150kb' }));
@@ -22,66 +25,83 @@ const taskInput = z.object({ title: z.string().trim().min(3).max(180), kind: z.e
 const taskPatch = taskInput.partial().extend({ done: z.boolean().optional(), completedDate: localDate.optional() }).refine(o => Object.keys(o).length > 0, 'Debes enviar un cambio');
 
 app.get('/api/health', (_req, res) => { res.json({ ok: true, app: 'paso-a-paso', timestamp: new Date().toISOString() }); });
-app.get('/api/bootstrap', (req, res) => {
+
+app.get('/api/bootstrap', async (req, res) => {
   const date = localDate.parse(req.query.date);
-  res.json(store.bootstrap(date));
+  res.json(await store.bootstrap(date));
 });
-app.patch('/api/profile', (req, res) => {
+
+app.patch('/api/profile', async (req, res) => {
   const { name } = z.object({ name: z.string().trim().max(60) }).parse(req.body);
-  res.json({ name: store.setProfile(name) });
+  res.json({ name: await store.setProfile(name) });
 });
-app.post('/api/tasks', (req, res) => {
+
+app.post('/api/tasks', async (req, res) => {
   const input = taskInput.parse(req.body);
-  res.status(201).json(store.createTask(input));
+  res.status(201).json(await store.createTask(input));
 });
-app.patch('/api/tasks/:id', (req, res) => {
-  const task = store.updateTask(id.parse(req.params.id), taskPatch.parse(req.body));
+
+app.patch('/api/tasks/:id', async (req, res) => {
+  const task = await store.updateTask(id.parse(req.params.id), taskPatch.parse(req.body));
   if (!task) { res.status(404).json({ error: 'Tarea no encontrada' }); return; }
   res.json(task);
 });
-app.delete('/api/tasks/:id', (req, res) => {
-  const removed = store.deleteTask(id.parse(req.params.id));
+
+app.delete('/api/tasks/:id', async (req, res) => {
+  const removed = await store.deleteTask(id.parse(req.params.id));
   if (!removed) { res.status(404).json({ error: 'Tarea no encontrada' }); return; }
   res.status(204).send();
 });
-app.post('/api/steps/:id/toggle', (req, res) => {
+
+app.post('/api/steps/:id/toggle', async (req, res) => {
   const parsed = z.object({ localDate: localDate.optional() }).parse(req.body || {});
-  const task = store.toggleStep(id.parse(req.params.id), parsed.localDate);
+  const task = await store.toggleStep(id.parse(req.params.id), parsed.localDate);
   if (!task) { res.status(404).json({ error: 'Paso no encontrado' }); return; }
   res.json(task);
 });
-app.post('/api/sessions', (req, res) => {
+
+app.post('/api/sessions', async (req, res) => {
   const input = z.object({
     taskId: id.nullable(), minutes: z.number().int().min(5).max(25), elapsedSeconds: z.number().int().min(0).max(1500),
     completed: z.boolean(), localDate
   }).parse(req.body);
-  if (input.taskId && !store.getTask(input.taskId)) { res.status(400).json({ error: 'La tarea seleccionada no existe' }); return; }
+  if (input.taskId && !(await store.getTask(input.taskId))) { res.status(400).json({ error: 'La tarea seleccionada no existe' }); return; }
   if (input.elapsedSeconds > input.minutes * 60) { res.status(400).json({ error: 'El tiempo transcurrido supera la duración elegida' }); return; }
-  const sessionId = store.addSession(input);
+  const sessionId = await store.addSession(input);
   res.status(201).json({ id: sessionId });
 });
+
 app.get('/api/ai/status', async (_req, res) => { res.json(await aiStatus()); });
+
 app.post('/api/chat', async (req, res) => {
   const { message } = z.object({ message: z.string().trim().min(1).max(3000) }).parse(req.body);
-  const history = store.messages().map(({ role, content }) => ({ role, content }));
+  const rawMessages = await store.messages();
+  const history = rawMessages.map(({ role, content }) => ({ role, content }));
   const answer = await chatAI(history, message);
-  store.addChatPair(message, answer);
+  await store.addChatPair(message, answer);
   res.status(201).json({ answer });
 });
-app.delete('/api/chat', (_req, res) => { store.clearChat(); res.status(204).send(); });
+
+app.delete('/api/chat', async (_req, res) => {
+  await store.clearChat();
+  res.status(204).send();
+});
+
 app.post('/api/flashcards/generate', async (req, res) => {
   const { notes } = z.object({ notes: z.string().trim().min(20, 'Escribe al menos 20 caracteres').max(8000) }).parse(req.body);
   const cards = await generateFlashcardsAI(notes);
-  store.addFlashcards(cards);
+  await store.addFlashcards(cards);
   res.status(201).json({ cards });
 });
-app.patch('/api/flashcards/:id', (req, res) => {
+
+app.patch('/api/flashcards/:id', async (req, res) => {
   const { reviewed } = z.object({ reviewed: z.boolean() }).parse(req.body);
-  if (!store.reviewFlashcard(id.parse(req.params.id), reviewed)) { res.status(404).json({ error: 'Tarjeta no encontrada' }); return; }
+  if (!(await store.reviewFlashcard(id.parse(req.params.id), reviewed))) { res.status(404).json({ error: 'Tarjeta no encontrada' }); return; }
   res.json({ reviewed });
 });
-app.delete('/api/flashcards/:id', (req, res) => {
-  if (!store.deleteFlashcard(id.parse(req.params.id))) { res.status(404).json({ error: 'Tarjeta no encontrada' }); return; }
+
+app.delete('/api/flashcards/:id', async (req, res) => {
+  if (!(await store.deleteFlashcard(id.parse(req.params.id)))) { res.status(404).json({ error: 'Tarjeta no encontrada' }); return; }
   res.status(204).send();
 });
 
